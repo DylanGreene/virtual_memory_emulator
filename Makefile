@@ -1,6 +1,6 @@
 
-virtmem: main.o page_table.o disk.o program.o
-	gcc main.o page_table.o disk.o program.o -o virtmem
+virtmem: main.o page_table.o disk.o program.o queue.o
+	gcc main.o page_table.o disk.o program.o queue.o -o virtmem
 
 main.o: main.c
 	gcc -Wall -g -c main.c -o main.o
@@ -14,6 +14,8 @@ disk.o: disk.c
 program.o: program.c
 	gcc -Wall -g -c program.c -o program.o
 
+queue.o: queue.c queue.h
+	gcc -Wall -g -c queue.c -o queue.o
 
 clean:
 	rm -f *.o virtmem
