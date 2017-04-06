@@ -23,53 +23,62 @@ int nframes;
 char *algorithm;
 struct disk *disk;
 int *frame_table;
+struct Queue *q;
 
 
 void page_fault_handler( struct page_table *pt, int page ){
 	printf("page fault on page #%d\n",page);
 
-	if(!strcmp(algorithm, "rand")) {
+	// Get the current info of the page
+	int curr_bits, curr_frame;
+	page_table_get_entry(pt, page, &curr_frame, &curr_bits);
 
-		int curr_bits, curr_frame;
-		page_table_get_entry(pt, page, &curr_frame, &curr_bits);
+	// Check if the page table entry is not loaded in physmem
+	if(!curr_bits){
 
-		// Check if the page table entry is not loaded in physmem
-		if(!curr_bits){
-			int frame = rand() % nframes;
-			char *physmem = page_table_get_physmem(pt);
-			int prev_bits, prev_frame;
-
-			// Remove the old page from physmem frame
-			if(frame_table[frame] >= 0){
-				page_table_get_entry(pt, frame_table[frame], &prev_frame, &prev_bits);
-				// If it is dirty write it to disk
-				if(prev_bits == (PROT_READ|PROT_WRITE)){
-					disk_write(disk, frame_table[frame], &physmem[frame*PAGE_SIZE]);
-				}
-				// Update to signify no longer loaded in physmem
-				page_table_set_entry(pt, frame_table[frame], 0, 0);
+		// Determine how to choose which frame to place into
+		int frame = 0;
+		if(!strcmp(algorithm, "rand")) {
+			frame = rand() % nframes;
+		}else if(!strcmp(algorithm, "fifo")) {
+			if(queue_size(q) == nframes){
+				frame = queue_front(q);
+			}else{
+				frame = queue_size(q);
 			}
+		}else if(!strcmp(algorithm, "lru")) {
 
-			// Put the new page into the the memory and update the tables
-			page_table_set_entry(pt, page, frame, PROT_READ);
-			disk_read(disk, page, &physmem[frame*PAGE_SIZE]);
-			frame_table[frame] = page;
-
-		// Add the WRITE dirty bit
-		}else if(curr_bits == PROT_READ){
-			page_table_set_entry(pt, page, curr_frame, PROT_READ|PROT_WRITE);
+		}else{
+			fprintf(stderr,"unknown algorithm: %s\n", algorithm);
+			return;
 		}
-		page_table_print(pt);
 
-	}else if(!strcmp(algorithm, "fifo")) {
+		char *physmem = page_table_get_physmem(pt);
+		int prev_bits, prev_frame;
 
+		// Remove the old page from physmem frame
+		if(frame_table[frame] >= 0){
+			page_table_get_entry(pt, frame_table[frame], &prev_frame, &prev_bits);
+			// If it is dirty write it to disk
+			if(prev_bits == (PROT_READ|PROT_WRITE)){
+				disk_write(disk, frame_table[frame], &physmem[frame*PAGE_SIZE]);
+			}
+			// Update to signify no longer loaded in physmem
+			page_table_set_entry(pt, frame_table[frame], 0, 0);
+			queue_pop(q);
+		}
 
-	}else if(!strcmp(algorithm, "lru")) {
+		// Put the new page into the the memory and update the tables
+		page_table_set_entry(pt, page, frame, PROT_READ);
+		disk_read(disk, page, &physmem[frame*PAGE_SIZE]);
+		frame_table[frame] = page;
+		queue_push(q, frame);
 
-	}else{
-		fprintf(stderr,"unknown algorithm: %s\n", algorithm);
-		return;
+	// Add the WRITE dirty bit
+	}else if(curr_bits == PROT_READ){
+		page_table_set_entry(pt, page, curr_frame, PROT_READ|PROT_WRITE);
 	}
+	page_table_print(pt);
 }
 
 int main( int argc, char *argv[] ){
@@ -90,6 +99,7 @@ int main( int argc, char *argv[] ){
 	for(i = 0; i < nframes; i++){
 		frame_table[i] = -1;
 	}
+	q = create_queue();
 
 	// Seed the rand function with time for more randomness
 	//srand(time(NULL));
@@ -112,13 +122,10 @@ int main( int argc, char *argv[] ){
 
 	if(!strcmp(program, "sort")){
 		sort_program(virtmem,npages*PAGE_SIZE);
-
 	}else if(!strcmp(program, "scan")){
 		scan_program(virtmem,npages*PAGE_SIZE);
-
 	}else if(!strcmp(program, "focus")){
 		focus_program(virtmem,npages*PAGE_SIZE);
-
 	}else{
 		fprintf(stderr,"unknown program: %s\n",argv[4]);
 		return 1;
