@@ -20,14 +20,15 @@ how to use the page table and disk interfaces.
 // Global Variables
 int npages;
 int nframes;
+int page_faults, disk_reads, disk_writes;
 char *algorithm;
 struct disk *disk;
 int *frame_table;
-struct Queue *q;
-
+int counter;
 
 void page_fault_handler( struct page_table *pt, int page ){
-	printf("page fault on page #%d\n",page);
+	//printf("page fault on page #%d\n",page);
+	page_faults++;
 
 	// Get the current info of the page
 	int curr_bits, curr_frame;
@@ -38,16 +39,18 @@ void page_fault_handler( struct page_table *pt, int page ){
 
 		// Determine how to choose which frame to place into
 		int frame = 0;
-		if(!strcmp(algorithm, "rand")) {
+		if(!strcmp(algorithm, "rand")){
 			frame = rand() % nframes;
-		}else if(!strcmp(algorithm, "fifo")) {
-			if(queue_size(q) == nframes){
-				frame = queue_front(q);
+		}else if(!strcmp(algorithm, "fifo")){
+			frame = counter;
+			counter = (counter + 1) % nframes;
+		}else if(!strcmp(algorithm, "custom")){
+			frame = counter;
+			if(counter < nframes - 1){
+				counter++;
 			}else{
-				frame = queue_size(q);
+				counter--;
 			}
-		}else if(!strcmp(algorithm, "lru")) {
-
 		}else{
 			fprintf(stderr,"unknown algorithm: %s\n", algorithm);
 			return;
@@ -62,28 +65,28 @@ void page_fault_handler( struct page_table *pt, int page ){
 			// If it is dirty write it to disk
 			if(prev_bits == (PROT_READ|PROT_WRITE)){
 				disk_write(disk, frame_table[frame], &physmem[frame*PAGE_SIZE]);
+				disk_writes++;
 			}
 			// Update to signify no longer loaded in physmem
 			page_table_set_entry(pt, frame_table[frame], 0, 0);
-			queue_pop(q);
 		}
 
 		// Put the new page into the the memory and update the tables
 		page_table_set_entry(pt, page, frame, PROT_READ);
 		disk_read(disk, page, &physmem[frame*PAGE_SIZE]);
+		disk_reads++;
 		frame_table[frame] = page;
-		queue_push(q, frame);
 
 	// Add the WRITE dirty bit
 	}else if(curr_bits == PROT_READ){
 		page_table_set_entry(pt, page, curr_frame, PROT_READ|PROT_WRITE);
 	}
-	page_table_print(pt);
+	//page_table_print(pt);
 }
 
 int main( int argc, char *argv[] ){
 	if(argc!=5){
-		printf("use: virtmem <npages> <nframes> <rand|fifo|lru> <sort|scan|focus>\n");
+		printf("use: virtmem <npages> <nframes> <rand|fifo|custom> <sort|scan|focus>\n");
 		return 1;
 	}
 
@@ -99,10 +102,15 @@ int main( int argc, char *argv[] ){
 	for(i = 0; i < nframes; i++){
 		frame_table[i] = -1;
 	}
-	q = create_queue();
+	counter = 0;
+
+	// Initialize statistic counters
+	page_faults = 0;
+	disk_reads = 0;
+	disk_writes = 0;
 
 	// Seed the rand function with time for more randomness
-	//srand(time(NULL));
+	srand(time(NULL));
 
 	disk = disk_open("myvirtualdisk",npages);
 	if(!disk){
@@ -118,8 +126,6 @@ int main( int argc, char *argv[] ){
 
 	char *virtmem = page_table_get_virtmem(pt);
 
-	char *physmem = page_table_get_physmem(pt);
-
 	if(!strcmp(program, "sort")){
 		sort_program(virtmem,npages*PAGE_SIZE);
 	}else if(!strcmp(program, "scan")){
@@ -131,9 +137,15 @@ int main( int argc, char *argv[] ){
 		return 1;
 	}
 
+	// Clean up memory
 	page_table_delete(pt);
 	disk_close(disk);
 	free(frame_table);
+
+	// Print result stats
+	printf("Number of Page Faults: %d\n", page_faults);
+	printf("Number of Disk Reads: %d\n", disk_reads);
+	printf("Number of Disk Writes: %d\n", disk_writes);
 
 	return 0;
 }
