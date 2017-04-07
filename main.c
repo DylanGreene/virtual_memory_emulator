@@ -9,7 +9,6 @@ how to use the page table and disk interfaces.
 #include "page_table.h"
 #include "disk.h"
 #include "program.h"
-#include "queue.h"
 
 #include <stdio.h>
 #include <stdlib.h>
