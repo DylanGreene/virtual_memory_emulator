@@ -98,6 +98,7 @@ int main( int argc, char *argv[] ){
 	// Make sure valid npages and nframes
 	if(npages < 3 || nframes < 3){
 		fprintf(stderr, "Frames and pages values must be >= 3!\n");
+		return 1;
 	}
 
 	// Create frame table to look up what page is in each frame
