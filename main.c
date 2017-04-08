@@ -95,6 +95,11 @@ int main( int argc, char *argv[] ){
 	algorithm = argv[3];
 	const char *program = argv[4];
 
+	// Make sure valid npages and nframes
+	if(npages < 3 || nframes < 3){
+		fprintf(stderr, "Frames and pages values must be >= 3!\n");
+	}
+
 	// Create frame table to look up what page is in each frame
 	frame_table = malloc(nframes * sizeof(int));
 	int i;
