@@ -52,7 +52,7 @@ void page_fault_handler( struct page_table *pt, int page ){
 			}
 		}else{
 			fprintf(stderr,"unknown algorithm: %s\n", algorithm);
-			return;
+			exit(1);
 		}
 
 		char *physmem = page_table_get_physmem(pt);
